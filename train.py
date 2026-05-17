@@ -6,7 +6,11 @@ from torchvision import datasets, transforms
 
 image_transform = transforms.Compose([
     transforms.Resize((224, 224)),
-    transforms.ToTensor()
+    transforms.ToTensor(),
+    transforms.Normalize(
+        mean=[0.5, 0.5, 0.5],
+        std=[0.5, 0.5, 0.5]
+    )
 ])
 
 train_dataset = datasets.OxfordIIITPet(
@@ -24,3 +28,4 @@ train_loader = DataLoader(
 )
 
 images, labels = next(iter(train_loader))
+
