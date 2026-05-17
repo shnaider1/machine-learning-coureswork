@@ -1,7 +1,7 @@
 # train.py
 
 import torch
-from torch import nn
+from torch import nn, optim
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
@@ -64,8 +64,36 @@ train_loader = DataLoader(
     shuffle=True
 )
 
-images, labels = next(iter(train_loader))
-images = images.to(device)
-
 model = PetCNN(num_classes=37).to(device)
-outputs = model(images)
+
+loss_fn = nn.CrossEntropyLoss()
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+for epoch in range(5):
+    model.train()
+
+    correct = 0
+    total = 0
+
+    for images, labels in train_loader:
+        images = images.to(device)
+        labels = labels.to(device)
+
+        optimizer.zero_grad()
+
+        outputs = model(images)
+        loss = loss_fn(outputs, labels)
+
+        loss.backward()
+        optimizer.step()
+
+        predictions = outputs.argmax(1)
+
+        correct += (predictions == labels).sum().item()
+        total += labels.size(0)
+
+    accuracy = 100 * correct / total
+    print(f"Epoch {epoch + 1}: accuracy = {accuracy:.2f}%")
+
+torch.save(model.state_dict(), "model.pth")
+print("Saved model to model.pth")
