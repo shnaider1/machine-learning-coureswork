@@ -38,62 +38,67 @@ class PetCNN(nn.Module):
         return x
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print("Using device:", device)
+def main():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("Using device:", device)
 
-image_transform = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize(
-        mean=[0.5, 0.5, 0.5],
-        std=[0.5, 0.5, 0.5]
+    image_transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=[0.5, 0.5, 0.5],
+            std=[0.5, 0.5, 0.5]
+        )
+    ])
+
+    train_dataset = datasets.OxfordIIITPet(
+        root="data",
+        split="trainval",
+        target_types="category",
+        download=True,
+        transform=image_transform
     )
-])
 
-train_dataset = datasets.OxfordIIITPet(
-    root="data",
-    split="trainval",
-    target_types="category",
-    download=True,
-    transform=image_transform
-)
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=32,
+        shuffle=True
+    )
 
-train_loader = DataLoader(
-    train_dataset,
-    batch_size=32,
-    shuffle=True
-)
+    model = PetCNN(num_classes=37).to(device)
 
-model = PetCNN(num_classes=37).to(device)
+    loss_fn = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-loss_fn = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+    for epoch in range(5):
+        model.train()
 
-for epoch in range(5):
-    model.train()
+        correct = 0
+        total = 0
 
-    correct = 0
-    total = 0
+        for images, labels in train_loader:
+            images = images.to(device)
+            labels = labels.to(device)
 
-    for images, labels in train_loader:
-        images = images.to(device)
-        labels = labels.to(device)
+            optimizer.zero_grad()
 
-        optimizer.zero_grad()
+            outputs = model(images)
+            loss = loss_fn(outputs, labels)
 
-        outputs = model(images)
-        loss = loss_fn(outputs, labels)
+            loss.backward()
+            optimizer.step()
 
-        loss.backward()
-        optimizer.step()
+            predictions = outputs.argmax(1)
 
-        predictions = outputs.argmax(1)
+            correct += (predictions == labels).sum().item()
+            total += labels.size(0)
 
-        correct += (predictions == labels).sum().item()
-        total += labels.size(0)
+        accuracy = 100 * correct / total
+        print(f"Epoch {epoch + 1}: accuracy = {accuracy:.2f}%")
 
-    accuracy = 100 * correct / total
-    print(f"Epoch {epoch + 1}: accuracy = {accuracy:.2f}%")
+    torch.save(model.state_dict(), "model.pth")
+    print("Saved model to model.pth")
 
-torch.save(model.state_dict(), "model.pth")
-print("Saved model to model.pth")
+
+if __name__ == "__main__":
+    main()
