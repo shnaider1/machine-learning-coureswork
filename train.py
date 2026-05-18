@@ -120,8 +120,9 @@ def main():
         accuracy = 100 * correct / total
         print(f"Epoch {epoch + 1}: accuracy = {accuracy:.2f}%")
 
-    torch.save(model.state_dict(), "model.pth")
-    print("Saved model to model.pth")
+        torch.save(model.state_dict(), f"model_epoch_{epoch + 1:02d}.pth")
+        torch.save(model.state_dict(), "model.pth")
+        print(f"Saved checkpoint for epoch {epoch + 1}")
 
 
 if __name__ == "__main__":
