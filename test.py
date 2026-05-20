@@ -8,27 +8,7 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets
 import torchvision.transforms.functional as TF
 
-from train import PetCNN
-
-
-def make_grey_image_and_mask(image, trimap, background_value=128):
-    image = image.convert("RGB")
-
-    image_array = np.array(image).copy()
-    trimap_array = np.array(trimap)
-
-    pet_mask = trimap_array != 2
-    background_mask = trimap_array == 2
-
-    image_array[background_mask] = background_value
-
-    mask_array = np.zeros(trimap_array.shape, dtype=np.uint8)
-    mask_array[pet_mask] = 255
-
-    grey_image = Image.fromarray(image_array)
-    mask_image = Image.fromarray(mask_array)
-
-    return grey_image, mask_image
+from train import PetCNN, IMAGE_SIZE, PADDING, BACKGROUND_VALUE, make_pet_crop_and_mask
 
 
 class PetTrimapDataset(Dataset):
@@ -47,12 +27,12 @@ class PetTrimapDataset(Dataset):
         image, target = self.dataset[index]
         label, trimap = target
 
-        image, mask = make_grey_image_and_mask(image, trimap)
+        image, mask = make_pet_crop_and_mask(image, trimap)
 
-        image = TF.resize(image, (224, 224))
+        image = TF.resize(image, (IMAGE_SIZE, IMAGE_SIZE))
         mask = TF.resize(
             mask,
-            (224, 224),
+            (IMAGE_SIZE, IMAGE_SIZE),
             interpolation=TF.InterpolationMode.NEAREST
         )
 
