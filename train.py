@@ -1,13 +1,18 @@
 # train.py
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 
 import torch
 from torch import nn, optim
 from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets
 import torchvision.transforms.functional as TF
+
+
+IMAGE_SIZE = 224
+PADDING = 25
+BACKGROUND_VALUE = 128
 
 
 class BasicBlock(nn.Module):
@@ -66,7 +71,7 @@ class PetCNN(nn.Module):
         return x
 
 
-def make_grey_image_and_mask(image, trimap, background_value=128):
+def make_pet_crop_and_mask(image, trimap):
     image = image.convert("RGB")
 
     image_array = np.array(image).copy()
@@ -75,7 +80,7 @@ def make_grey_image_and_mask(image, trimap, background_value=128):
     pet_mask = trimap_array != 2
     background_mask = trimap_array == 2
 
-    image_array[background_mask] = background_value
+    image_array[background_mask] = BACKGROUND_VALUE
 
     mask_array = np.zeros(trimap_array.shape, dtype=np.uint8)
     mask_array[pet_mask] = 255
@@ -83,17 +88,61 @@ def make_grey_image_and_mask(image, trimap, background_value=128):
     grey_image = Image.fromarray(image_array)
     mask_image = Image.fromarray(mask_array)
 
-    return grey_image, mask_image
+    box = mask_image.getbbox()
+
+    if box is None:
+        return grey_image, mask_image
+
+    left, top, right, bottom = box
+
+    width = right - left
+    height = bottom - top
+
+    side = max(width, height) + 2 * PADDING
+    side = max(side, 1)
+
+    center_x = (left + right) // 2
+    center_y = (top + bottom) // 2
+
+    crop_left = center_x - side // 2
+    crop_top = center_y - side // 2
+    crop_right = crop_left + side
+    crop_bottom = crop_top + side
+
+    square_image = Image.new(
+        "RGB",
+        (side, side),
+        (BACKGROUND_VALUE, BACKGROUND_VALUE, BACKGROUND_VALUE)
+    )
+    square_mask = Image.new("L", (side, side), 0)
+
+    safe_left = max(crop_left, 0)
+    safe_top = max(crop_top, 0)
+    safe_right = min(crop_right, image.width)
+    safe_bottom = min(crop_bottom, image.height)
+
+    image_crop = grey_image.crop((safe_left, safe_top, safe_right, safe_bottom))
+    mask_crop = mask_image.crop((safe_left, safe_top, safe_right, safe_bottom))
+
+    paste_x = max(0, -crop_left)
+    paste_y = max(0, -crop_top)
+
+    square_image.paste(image_crop, (paste_x, paste_y))
+    square_mask.paste(mask_crop, (paste_x, paste_y))
+
+    return square_image, square_mask
 
 
 class PetTrimapDataset(Dataset):
-    def __init__(self, root, split, download=True):
+    def __init__(self, root, split, train=True, download=True):
         self.dataset = datasets.OxfordIIITPet(
             root=root,
             split=split,
             target_types=("category", "segmentation"),
             download=download
         )
+
+        self.train = train
 
     def __len__(self):
         return len(self.dataset)
@@ -102,12 +151,16 @@ class PetTrimapDataset(Dataset):
         image, target = self.dataset[index]
         label, trimap = target
 
-        image, mask = make_grey_image_and_mask(image, trimap)
+        image, mask = make_pet_crop_and_mask(image, trimap)
 
-        image = TF.resize(image, (224, 224))
+        if self.train and np.random.rand() < 0.5:
+            image = ImageOps.mirror(image)
+            mask = ImageOps.mirror(mask)
+
+        image = TF.resize(image, (IMAGE_SIZE, IMAGE_SIZE))
         mask = TF.resize(
             mask,
-            (224, 224),
+            (IMAGE_SIZE, IMAGE_SIZE),
             interpolation=TF.InterpolationMode.NEAREST
         )
 
@@ -132,6 +185,7 @@ def main():
     train_dataset = PetTrimapDataset(
         root="data",
         split="trainval",
+        train=True,
         download=True
     )
 
